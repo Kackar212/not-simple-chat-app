@@ -1,0 +1,17 @@
+export enum SupportedFileFormat {
+  Gif = 'gif',
+  Svg = 'svg',
+  Png = 'png',
+  Jpeg = 'jpeg',
+  Jpg = 'jpg',
+  Avif = 'avif',
+  Webp = 'webp',
+  Tiff = 'tiff',
+  MP4 = 'mp4',
+  Mov = 'mov',
+  M4a = 'm4a',
+  Gp = '3gp',
+  G2 = '3g2',
+  Mj2 = 'mj2',
+  Mkv = 'mkv',
+}

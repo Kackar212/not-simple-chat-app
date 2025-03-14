@@ -1,0 +1,440 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Server {
+  id Int @id @default(autoincrement())
+
+  name String @db.VarChar(33)
+
+  description String @default("")
+
+  roles Role[]
+
+  members Member[]
+
+  channels Channel[]
+
+  serverIcon String?
+  iconPlaceholder String?
+
+  inviteLink InviteLink?
+
+  emojis Emoji[]
+
+  owner   User @relation(fields: [ownerId, ownerName], references: [id, username])
+  ownerId Int
+  ownerName String
+
+  serverProfiles ServerProfile[]
+
+  isGlobalServer Boolean? @unique
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([name, ownerName])
+}
+
+model InviteLink {
+  inviteId String @id
+
+  url String
+
+  expiration Int @default(7)
+
+  numberOfUses Int @default(-1)
+  usesLeft Int @default(-1)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  server   Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  serverId Int    @unique
+}
+
+model User {
+  id                 Int     @id @default(autoincrement())
+  username           String  @unique @db.VarChar(33)
+  displayName        String @unique
+  email              String  @unique
+  password           String
+  resetPasswordToken String? @unique
+  avatar             String
+  backgroundColor    String @default("#fff")
+  backgroundImage    String?
+  description        String @default("")
+  status             Status @default(Offline)
+  specialStatus      SpecialStatus?
+  isAccountActive    Boolean @default(false)
+  activateAccountToken String? @unique
+  activationTokenExpiresIn DateTime?
+
+  isInvisible Boolean @default(false)
+
+  ownedServers Server[]
+
+  joinedServers Member[]
+
+  friends Friend[] @relation("friends")
+
+  hosts Friend[] @relation("hosts")
+
+  blacklisted Blacklist[] @relation("blacklistedUsers")
+  blacklistOwners Blacklist[] @relation("blacklistOwners")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([id, username])
+}
+
+model Member {
+  id Int @id @default(autoincrement())
+
+  server   Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  serverId Int
+
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId Int
+
+  channelUsers ChannelUser[]
+
+  roles UserRole[]
+
+  messages Message[]
+
+  profile ServerProfile?
+  
+  reactions Reaction[]
+
+  voiceChannelId Int?
+
+  isBanned Boolean @default(false)
+  isKickedOut Boolean @default(false)
+
+  kickedOutUntil DateTime?
+
+  kickedOutCount Int @default(0)
+
+  isOwner Boolean @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@unique([serverId, userId])
+}
+
+model ServerProfile {
+  id Int @id @default(autoincrement())
+
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  serverId Int
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  memberId Int @unique
+
+  displayName String
+  status Status @default(Offline)
+  specialStatus SpecialStatus?
+  avatar String
+  backgroundColor    String @default("#fff")
+  backgroundImage    String?
+  description        String @default("")
+
+  isInvisible Boolean @default(false)
+
+  @@unique([serverId, memberId])
+}
+
+model Role {
+  id   Int    @id @default(autoincrement())
+  name String
+
+  server   Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  serverId Int
+
+  members UserRole[]
+
+  permissions Permission[]
+
+  color String @default("rgb(220, 220, 220)")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([name, serverId])
+}
+
+model UserRole {
+  role Role @relation(fields: [roleName, roleServerId], references: [name, serverId])
+  roleName String
+  roleServerId Int
+
+  member         Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  memberId Int
+
+  @@id([roleName, roleServerId, memberId])
+  @@unique([roleName, roleServerId, memberId])
+}
+
+model ChannelUser {
+  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  channelId Int
+
+  member   Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  memberId Int
+
+  isChannelHidden Boolean @default(false)
+
+  @@id([channelId, memberId])
+  @@unique([channelId, memberId])
+}
+
+model Friend {
+  id Int @id @default(autoincrement())
+
+  friend User @relation("friends", fields: [friendName], references: [username])
+  friendName String
+
+  user  User @relation("hosts", fields: [username], references: [username])
+  username String
+
+  privateChannelId Int @default(-1)
+
+  isPending Boolean @default(true)
+  isInvited Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([friendName, username])
+}
+
+model Blacklist {
+  blocked User @relation("blacklistedUsers", fields: [blockedUsername], references: [username])
+  blockedUsername String
+
+  blacklistOwner User @relation("blacklistOwners", fields: [blacklistOwnerUsername], references: [username])
+  blacklistOwnerUsername String
+
+  @@unique([blockedUsername, blacklistOwnerUsername])
+}
+
+model Permission {
+  id         Int    @id @default(autoincrement())
+  permission String
+
+  isAllowed Boolean @default(true)
+
+  role   Role @relation(fields: [roleName, roleServerId], references: [name, serverId], onDelete: Cascade)
+  roleName String
+  roleServerId Int
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([roleName, permission, roleServerId])
+}
+
+model Channel {
+  id          Int     @id @default(autoincrement())
+
+  name        String[]
+  
+  description String  @default("")
+  isPrivate   Boolean @default(false)
+  isRequestAccepted Boolean?
+  isCallPending Boolean @default(false)
+
+  server   Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  serverId Int
+
+  type ChannelType @default(Text)
+
+  messages Message[]
+  channelUsers ChannelUser[]
+
+  createdBy String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@unique([name, serverId])
+}
+
+model Message {
+  id  Int  @id @default(autoincrement())
+  message String
+
+  channel   Channel @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  channelId Int
+
+  member   Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  memberId Int
+
+  type MessageType @default(User)
+  
+  isSystemMessage Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now()) @updatedAt
+  editedAt DateTime?
+
+  isPinned Boolean @default(false)
+
+  embeds MessageEmbed[]
+
+  messageReference Message? @relation("References", fields: [messageReferenceId], references: [id], onDelete: SetNull)
+  messageReferenceId Int?
+
+  messageReferences Message[] @relation("References")
+
+  attachments Attachment[]
+  reactions Reaction[]
+  pinnedMessage PinnedMessage?
+}
+
+model PinnedMessage {
+  id  Int @id @default(autoincrement())
+
+  message Message? @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  messageId Int? @unique
+}
+
+model Attachment {
+  id Int @id @default(autoincrement())
+  
+  name String
+  type FileType
+  contentType String
+  extension String
+  url String
+  size Int
+  originalName String
+  isSpoiler Boolean @default(false)
+  isVoiceClip Boolean @default(false)
+  width Int
+  height Int
+  poster String?
+  placeholder String?
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  messageId Int
+}
+
+model Embed {
+  id Int @id @default(autoincrement())
+
+  messages MessageEmbed[]
+
+  type String
+  width Int?
+  height Int?
+  url String?
+  originalUrl String?
+  format String?
+  description String?
+  title String?
+  siteName String?
+  image String?
+  isSpoiler Boolean @default(false)
+  placeholder String?
+  poster String?
+}
+
+model MessageEmbed {
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  messageId Int
+
+  embed Embed @relation(fields: [embedId], references: [id], onDelete: Cascade)
+  embedId Int
+
+  @@id([embedId, messageId])
+}
+
+model Emoji {
+  id Int @id @default(autoincrement())
+  
+  scope EmojiScope
+  url String
+  name String
+  placeholder String
+
+  server Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  serverId Int
+
+  reactions Reaction[]
+
+  @@unique([serverId, name])
+}
+
+model Reaction {
+  id Int @id @default(autoincrement())
+  
+  emoji Emoji? @relation(fields: [emojiId], references: [id])
+  emojiId Int?
+
+  emojiName String
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  messageId Int
+
+  member Member @relation(fields: [memberId], references: [id], onDelete: Cascade)
+  memberId Int
+
+  @@unique([messageId, memberId, emojiName])
+}
+
+enum MessageType {
+  User
+  Request
+  Accepted
+  Declined
+  ServerInvitation
+  FriendInvitation
+  ReplyToPinnedMessage
+  UserPinnedMessage
+  UserStartedVoiceCall
+  VoiceCallEnded
+}
+
+enum Status {
+  Online
+  Offline
+}
+
+enum SpecialStatus {
+  DoNotDisturb
+  Idle
+}
+
+enum ChannelType {
+  Text
+  Voice
+}
+
+enum FriendStatus {
+  Pending
+  Online
+  Offline
+}
+
+enum FileType {
+  Gif
+  Image
+  Audio
+  Video
+  Pdf
+  Text
+  Other
+}
+
+enum EmojiScope {
+  Public
+  Private
+}
