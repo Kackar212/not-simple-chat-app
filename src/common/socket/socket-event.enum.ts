@@ -32,4 +32,5 @@ export enum SocketEvent {
   Reaction = 'reaction',
   Emoji = 'emoji',
   Friend = 'friend',
+  PollAnswer = 'pollAnswer',
 }

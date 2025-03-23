@@ -85,6 +85,8 @@ model User {
 
   hosts Friend[] @relation("hosts")
 
+  answers PollUserAnswer[]
+
   blacklisted Blacklist[] @relation("blacklistedUsers")
   blacklistOwners Blacklist[] @relation("blacklistOwners")
 
@@ -297,6 +299,7 @@ model Message {
   attachments Attachment[]
   reactions Reaction[]
   pinnedMessage PinnedMessage?
+  poll Poll?
 }
 
 model PinnedMessage {
@@ -390,6 +393,47 @@ model Reaction {
   @@unique([messageId, memberId, emojiName])
 }
 
+model Poll {
+  id Int @id @default(autoincrement())
+
+  question String
+  type PollType @default(Poll)
+
+  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  messageId Int @unique
+
+  answers PollAnswer[]
+  pollUserAnswers PollUserAnswer[]
+}
+
+model PollAnswer {
+  id Int @id @default(autoincrement())
+
+  poll Poll @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  pollId Int
+
+  isCorrectAnswer Boolean? @default(false)
+
+  pollUserAnswers PollUserAnswer[]
+
+  answer String
+}
+
+model PollUserAnswer {
+  id Int @id @default(autoincrement())
+
+  pollAnswer PollAnswer @relation(fields: [pollAnswerId], references: [id], onDelete: Cascade)
+  pollAnswerId Int
+
+  poll Poll @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  pollId Int
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId Int
+
+  @@unique([userId, pollId])
+}
+
 enum MessageType {
   User
   Request
@@ -437,4 +481,9 @@ enum FileType {
 enum EmojiScope {
   Public
   Private
+}
+
+enum PollType {
+  Poll
+  Quiz
 }

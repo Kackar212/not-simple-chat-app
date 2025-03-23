@@ -3,7 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import { NextFunction, Request } from 'express';
 import { createProxyMiddleware } from 'http-proxy-middleware';
 import { SessionGuard } from 'src/common';
-console.log(process.env.TENOR_API_BASE_URL);
+
 const proxy = createProxyMiddleware({
   changeOrigin: true,
   target: process.env.TENOR_API_BASE_URL,

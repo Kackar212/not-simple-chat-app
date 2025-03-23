@@ -652,6 +652,7 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
       embeds: [],
       attachments: [],
       reactions: [],
+      poll: null,
     };
 
     this.server.to(rooms.channel(channelId)).emit(SocketEvent.Message, message);

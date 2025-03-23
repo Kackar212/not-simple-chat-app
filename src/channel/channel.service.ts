@@ -210,11 +210,19 @@ export class ChannelService {
         },
       },
       attachments: true,
-    };
+      poll: {
+        include: {
+          answers: true,
+          pollUserAnswers: {
+            include: {
+              pollAnswer: true,
+            },
+          },
+        },
+      },
+    } as const;
 
     let messages = [] as Message[];
-
-    console.log(around);
 
     if (around) {
       messages = (
@@ -296,12 +304,6 @@ export class ChannelService {
         : messagesWithReactions.at(0)?.id
       : null;
 
-    console.log('Hej: ', {
-      take,
-      last: messages.at(-1)?.id,
-      first: messages.at(0)?.id,
-      length: messages.length,
-    });
     if (hasPreviousCursor && (take === -52 || around)) {
       messagesWithReactions.shift();
     }

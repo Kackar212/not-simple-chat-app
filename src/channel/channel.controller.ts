@@ -39,6 +39,8 @@ import { EditMessageDTO } from 'src/message/dto/edit-message.dto';
 import { GetMessagesQuery } from './dto/get-messages-query.dto';
 import { CreateReactionDTO } from 'src/message/dto/create-reaction.dto';
 import { DeleteReactionDTO } from 'src/message/dto/delete-reaction.dto';
+import { CreatePollDTO } from 'src/message/dto/create-poll.dto';
+import { CreateUserAnswerDTO } from 'src/message/dto/create-answer.dto';
 
 @Controller('api/channels')
 export class ChannelController {
@@ -94,7 +96,7 @@ export class ChannelController {
   }
 
   @Delete('attachments/:attachmentId')
-  @UseGuards(SessionGuard)
+  @Permissions([ServerPermission.ManageMessages])
   async deleteAttachment(
     @Param('attachmentId', ParseIntPipe) attachmentId: number,
     @Req() { user }: RequestWithUser,
@@ -106,9 +108,8 @@ export class ChannelController {
   @Permissions([ServerPermission.ManageMessages])
   deleteMessage(
     @Body() { messageId }: { messageId: number; channelId: number },
-    @Req() { member }: RequestWithUser,
   ) {
-    return this.messageService.deleteMessage(member, messageId);
+    return this.messageService.deleteMessage(messageId);
   }
 
   @Patch('/messages')
@@ -164,4 +165,22 @@ export class ChannelController {
   setRolePermissions(
     @Body() { channelId, roleName, allowed, denied }: PermissionsDTO,
   ) {}
+
+  @Post('/polls')
+  @Permissions([ServerPermission.Member])
+  createPoll(
+    @Body() createPollDTO: CreatePollDTO,
+    @Req() { member }: RequestWithUser,
+  ) {
+    return this.messageService.createPoll(createPollDTO, member);
+  }
+
+  @Post('/polls/answers')
+  @Permissions([ServerPermission.Member])
+  createUserAnswer(
+    @Body() createUserAnswerDTO: CreateUserAnswerDTO,
+    @Req() { user: { id } }: RequestWithUser,
+  ) {
+    return this.messageService.createUserAnswer(createUserAnswerDTO, id);
+  }
 }

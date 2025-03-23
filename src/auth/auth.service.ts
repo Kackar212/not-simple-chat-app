@@ -230,6 +230,17 @@ export class AuthService {
       });
     }
 
+    const isPasswordEqual = await bcrypt.compare(password, user.password);
+
+    if (!isPasswordEqual) {
+      throw new BadRequestException({
+        code: ErrorCode.WrongCredentials,
+        message: 'Incorrect username or password!',
+        meta: { modelName: 'User', target: ['username', 'password'] },
+        statusCode: HttpStatus.BAD_REQUEST,
+      });
+    }
+
     const hasTokenExpired =
       user.activationTokenExpiresIn &&
       user.activationTokenExpiresIn.getTime() > Date.now();
@@ -262,17 +273,6 @@ export class AuthService {
         code: ErrorCode.InactiveAccount,
         message: 'You need to activate your account!',
         statusCode: HttpStatus.FORBIDDEN,
-      });
-    }
-
-    const isPasswordEqual = await bcrypt.compare(password, user.password);
-
-    if (!isPasswordEqual) {
-      throw new BadRequestException({
-        code: ErrorCode.WrongCredentials,
-        message: 'Incorrect username or password!',
-        meta: { modelName: 'User', target: ['username', 'password'] },
-        statusCode: HttpStatus.BAD_REQUEST,
       });
     }
 

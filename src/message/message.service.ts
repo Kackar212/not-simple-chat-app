@@ -1,6 +1,12 @@
-import { ForbiddenException, Injectable } from '@nestjs/common';
-import { $Enums, FileType, Message, Prisma } from '@prisma/client';
 import {
+  ForbiddenException,
+  HttpStatus,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { $Enums, FileType, Message, PollType, Prisma } from '@prisma/client';
+import {
+  ErrorCode,
   Member,
   PrismaService,
   SocketEvent,
@@ -19,6 +25,8 @@ import { DirectMessageService } from 'src/direct-message/direct-message.service'
 import { Server } from 'socket.io';
 import { unlink } from 'fs/promises';
 import { find } from 'linkifyjs';
+import { CreatePollDTO } from './dto/create-poll.dto';
+import { CreateUserAnswerDTO } from './dto/create-answer.dto';
 import path from 'path';
 
 interface CreateMessage extends CreateMessageDTO {
@@ -37,6 +45,7 @@ export class MessageService {
   async create(
     { message, channelId, member, type, replyTo }: CreateMessage,
     attachments: Express.Multer.File[],
+    createPollDTO?: CreatePollDTO,
   ) {
     const links = find(message, 'url', { defaultProtocol: 'https' }).slice(
       0,
@@ -47,6 +56,16 @@ export class MessageService {
       embeds: {
         select: {
           embed: true,
+        },
+      },
+      poll: {
+        include: {
+          answers: true,
+          pollUserAnswers: {
+            include: {
+              pollAnswer: true,
+            },
+          },
         },
       },
       messageReference: {
@@ -104,6 +123,32 @@ export class MessageService {
       attachments: true,
     } as const;
 
+    let createPollData:
+      | Prisma.PollUncheckedCreateNestedOneWithoutMessageInput
+      | undefined = undefined;
+
+    if (createPollDTO) {
+      createPollData = {
+        create: {
+          type: createPollDTO.type,
+          question: createPollDTO.question,
+          answers: {
+            createMany: {
+              data: createPollDTO.answers.map(
+                ({ answer, isCorrectAnswer }) => ({
+                  answer,
+                  isCorrectAnswer:
+                    createPollDTO.type === PollType.Quiz
+                      ? !!isCorrectAnswer
+                      : false,
+                }),
+              ),
+            },
+          },
+        },
+      } as const;
+    }
+
     const newMessage = await this.prisma.message.create({
       data: {
         message,
@@ -134,6 +179,7 @@ export class MessageService {
             })),
           },
         },
+        poll: createPollData,
       },
       include,
     });
@@ -200,27 +246,52 @@ export class MessageService {
   }
 
   async removeAttachment(attachmentId: number, user: User) {
-    const deletedAttachment = await this.prisma.attachment.delete({
-      where: {
-        id: attachmentId,
-        message: {
-          member: {
-            userId: user.id,
+    try {
+      const deletedAttachment = await this.prisma.attachment.delete({
+        where: {
+          id: attachmentId,
+          message: {
+            member: {
+              userId: user.id,
+            },
           },
         },
-      },
-    });
+        include: {
+          message: {
+            select: {
+              id: true,
+              attachments: true,
+              message: true,
+              channelId: true,
+            },
+          },
+        },
+      });
 
-    await unlink(
-      path.join(
-        process.cwd(),
-        'public',
-        UploadDestination.Attachments,
-        deletedAttachment.name,
-      ),
-    );
+      const {
+        message: { id, message, attachments },
+      } = deletedAttachment;
 
-    return deletedAttachment;
+      const hasAttachments =
+        attachments.filter(({ id }) => id !== attachmentId).length > 0;
+
+      await unlink(
+        path.join(
+          process.cwd(),
+          'public',
+          UploadDestination.Attachments,
+          deletedAttachment.name,
+        ),
+      );
+
+      if (!hasAttachments && message === '') {
+        this.deleteMessage(id);
+      }
+
+      return deletedAttachment;
+    } catch (e) {
+      throw getHttpException(e);
+    }
   }
 
   async addReaction(user: Member, { emoji, messageId }: CreateReactionDTO) {
@@ -303,7 +374,7 @@ export class MessageService {
     }
   }
 
-  async deleteMessage(member: Member, messageId: number) {
+  async deleteMessage(messageId: number) {
     try {
       const message = await this.prisma.message.delete({
         where: {
@@ -345,12 +416,12 @@ export class MessageService {
         ...message,
         reactions: [],
         embeds: [],
+        poll: null,
       } as Message);
 
       return message;
     } catch (e) {
-      console.log(e);
-      throw new ForbiddenException();
+      throw getHttpException(e);
     }
   }
 
@@ -390,6 +461,16 @@ export class MessageService {
           },
         },
       },
+      poll: {
+        include: {
+          answers: true,
+          pollUserAnswers: {
+            include: {
+              pollAnswer: true,
+            },
+          },
+        },
+      },
     } as const;
 
     try {
@@ -414,6 +495,7 @@ export class MessageService {
           embeds: [],
           attachments: [],
           reactions: [],
+          poll: null,
         });
       }
 
@@ -522,5 +604,61 @@ export class MessageService {
 
   async findAll(options: Prisma.MessageFindManyArgs) {
     return await this.prisma.message.findMany(options);
+  }
+
+  async createPoll(createPollDto: CreatePollDTO, member: Member) {
+    await this.create(
+      { message: '', channelId: createPollDto.channelId, member },
+      [],
+      createPollDto,
+    );
+
+    return {};
+  }
+
+  async createUserAnswer(
+    { messageId, answerId }: CreateUserAnswerDTO,
+    userId: number,
+  ) {
+    const poll = await this.prisma.poll.findUnique({
+      where: {
+        messageId,
+        answers: {
+          some: {
+            id: answerId,
+          },
+        },
+      },
+      select: { id: true, message: { select: { channelId: true } } },
+    });
+
+    if (!poll) {
+      throw new NotFoundException({
+        code: ErrorCode.NotFound,
+        message: 'Poll does not exists',
+        statusCode: HttpStatus.NOT_FOUND,
+      });
+    }
+
+    try {
+      const answer = await this.prisma.pollUserAnswer.create({
+        data: {
+          pollId: poll.id,
+          pollAnswerId: answerId,
+          userId,
+        },
+        include: {
+          pollAnswer: true,
+        },
+      });
+
+      this.socketGateway.server
+        .to(rooms.channel(poll.message.channelId))
+        .emit(SocketEvent.PollAnswer, { ...answer, messageId });
+
+      return answer;
+    } catch (e) {
+      throw getHttpException(e);
+    }
   }
 }

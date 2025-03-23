@@ -109,4 +109,9 @@ export interface ServerToClientEvents {
   voiceCallEnded: (message: Message) => void;
   reaction: (reaction: Reaction & { count: number }) => void;
   emoji: (emoji: Prisma.EmojiGetPayload<null>) => void;
+  pollAnswer: (
+    answer: Prisma.PollUserAnswerGetPayload<{
+      include: { pollAnswer: true };
+    }> & { messageId: number },
+  ) => void;
 }

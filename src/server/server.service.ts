@@ -20,7 +20,7 @@ import {
 import { CreateServerDTO } from 'src/server/dto/create-server.dto';
 import { CreateRoleDTO } from 'src/server/dto/create-role.dto';
 import { SocketGateway } from 'src/common/socket/socket.gateway';
-import { Prisma } from '@prisma/client';
+import { Prisma, Status } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 import { CreateEmojiDTO } from './dto/create-emoji.dto';
 import { writeFile } from 'fs/promises';
@@ -240,9 +240,13 @@ export class ServerService {
         },
       },
       include: {
-        _count: {
+        members: {
           select: {
-            members: true,
+            profile: {
+              select: {
+                status: true,
+              },
+            },
           },
         },
         channels: {
@@ -259,7 +263,20 @@ export class ServerService {
       });
     }
 
-    return { ...server, defaultChannel: server?.channels[0] };
+    const membersCount = server.members.length;
+    const offlineMembersCount = server.members.filter(
+      ({ profile }) => profile?.status === Status.Offline,
+    ).length;
+
+    const onlineMembersCount = membersCount - offlineMembersCount;
+
+    return {
+      ...server,
+      membersCount,
+      onlineMembersCount,
+      offlineMembersCount,
+      defaultChannel: server?.channels[0],
+    };
   }
 
   async getChannel(user: User, channelId: number) {
