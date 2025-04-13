@@ -1,4 +1,4 @@
-import { ForbiddenException, UseGuards } from '@nestjs/common';
+import { ForbiddenException, Inject, UseGuards } from '@nestjs/common';
 import {
   ConnectedSocket,
   MessageBody,
@@ -9,7 +9,7 @@ import {
   WebSocketServer,
   WsException,
 } from '@nestjs/websockets';
-import { $Enums, Status } from '@prisma/client';
+import { $Enums, Status, User } from '@prisma/client';
 import { Server } from 'socket.io';
 import {
   ChannelPermission,
@@ -21,7 +21,6 @@ import {
   ServerToClientEvents,
   Socket,
   SocketEvent,
-  User,
   UserWithoutPrivateData,
   WsSessionGuard,
   WsUser,
@@ -34,6 +33,7 @@ import { types } from 'mediasoup';
 import { MediasoupWorker } from '../mediasoup/mediasoup.worker';
 import { MediasoupRoom } from '../mediasoup/mediasoup.room';
 import { formatDistanceStrict } from 'date-fns';
+import { PRISMA_INJECTION_TOKEN } from '../prisma/prisma.module';
 
 function getRooms(
   channelId: number,
@@ -63,8 +63,6 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   public server: Server<ClientToServerEvents, ServerToClientEvents>;
 
-  public prisma: PrismaService;
-
   private workers: MediasoupWorker[] = [];
   private rooms: Map<number, MediasoupRoom> = new Map();
   private assignedWorkers: Map<number, MediasoupWorker> = new Map();
@@ -75,9 +73,10 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
   private currentServerId = new Map<string, number | undefined>();
   private typingUsers = new Map<number, string[]>();
 
-  constructor(prisma: PrismaService) {
-    this.prisma = prisma;
-
+  constructor(
+    @Inject(PRISMA_INJECTION_TOKEN)
+    private readonly prisma: PrismaService,
+  ) {
     this.createWorker();
   }
 
@@ -1039,17 +1038,7 @@ export class SocketGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
     socket
       .to(statusRooms)
-      .emit(
-        SocketEvent.Status,
-        exclude({ ...updatedUser, ...profile }, [
-          'password',
-          'resetPasswordToken',
-          'email',
-          'activateAccountToken',
-          'activationTokenExpiresIn',
-          'isAccountActive',
-        ]),
-      );
+      .emit(SocketEvent.Status, { ...updatedUser, ...profile });
   }
 
   @SubscribeMessage(SocketEvent.Typing)

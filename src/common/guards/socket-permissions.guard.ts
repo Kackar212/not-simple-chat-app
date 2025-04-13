@@ -2,6 +2,7 @@ import {
   BadRequestException,
   CanActivate,
   ExecutionContext,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -10,12 +11,14 @@ import { Prisma, Server } from '@prisma/client';
 import { RequestWithUser } from '../interfaces/request-with-user.interface';
 import { PermissionType } from '../decorators';
 import { PrismaService } from '../prisma/prisma.service';
+import { PRISMA_INJECTION_TOKEN } from '../prisma/prisma.module';
 
 @Injectable()
 export class WebsocketServerPermissionsGuard implements CanActivate {
   permissions: Array<string> = [];
 
   constructor(
+    @Inject(PRISMA_INJECTION_TOKEN)
     private readonly prisma: PrismaService,
     private readonly reflector: Reflector,
   ) {}

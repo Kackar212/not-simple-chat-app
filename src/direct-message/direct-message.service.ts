@@ -2,23 +2,25 @@ import {
   BadRequestException,
   ForbiddenException,
   HttpStatus,
+  Inject,
   Injectable,
   InternalServerErrorException,
   Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { $Enums, Prisma } from '@prisma/client';
+import { $Enums, Prisma, User } from '@prisma/client';
 import {
   getHttpException,
   PrismaService,
   rooms,
   SocketEvent,
-  User,
   exclude,
   ErrorCode,
   Member,
+  userPayload,
 } from 'src/common';
+import { PRISMA_INJECTION_TOKEN } from 'src/common/prisma/prisma.module';
 import { SocketGateway } from 'src/common/socket/socket.gateway';
 import { CreateDirectMessageChannelDTO } from 'src/direct-message/dto/create-direct-message-channel.dto';
 import { ServerService } from 'src/server/server.service';
@@ -26,6 +28,7 @@ import { ServerService } from 'src/server/server.service';
 @Injectable()
 export class DirectMessageService {
   constructor(
+    @Inject(PRISMA_INJECTION_TOKEN)
     private readonly prisma: PrismaService,
     private readonly websocketGateway: SocketGateway,
     private readonly configService: ConfigService,
@@ -33,7 +36,7 @@ export class DirectMessageService {
   ) {}
 
   async create(
-    member: Prisma.MemberGetPayload<{ include: { user: true } }>,
+    member: Prisma.MemberGetPayload<{ include: { user: userPayload } }>,
     { username }: CreateDirectMessageChannelDTO,
   ) {
     const { user } = member;

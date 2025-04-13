@@ -2,6 +2,7 @@ import {
   BadRequestException,
   CanActivate,
   ExecutionContext,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -11,12 +12,14 @@ import { Reflector } from '@nestjs/core';
 import { PermissionType } from '../decorators';
 import { Prisma } from '@prisma/client';
 import { ServerEntity as Server } from 'src/common';
+import { PRISMA_INJECTION_TOKEN } from '../prisma/prisma.module';
 
 @Injectable()
 export class ServerPermissionsGuard implements CanActivate {
   permissions: Array<string> = [];
 
   constructor(
+    @Inject(PRISMA_INJECTION_TOKEN)
     private readonly prisma: PrismaService,
     private readonly reflector: Reflector,
   ) {}

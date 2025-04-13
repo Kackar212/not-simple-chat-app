@@ -62,6 +62,7 @@
     "https-proxy-agent": "^7.0.6",
     "image-size": "^1.2.0",
     "jsdom": "^25.0.1",
+    "linkify-plugin-mention": "^4.2.0",
     "linkifyjs": "^4.2.0",
     "mediasoup": "^3.14.11",
     "mkdirp": "^3.0.1",

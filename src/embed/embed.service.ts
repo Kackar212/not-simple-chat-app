@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AxiosResponse } from 'axios';
 import { randomUUID } from 'crypto';
@@ -15,6 +15,7 @@ import path from 'path';
 import axios from 'axios';
 import jsdom from 'jsdom';
 import sharp from 'sharp';
+import { PRISMA_INJECTION_TOKEN } from 'src/common/prisma/prisma.module';
 
 const fileTypeFromBuffer = import('file-type').then(
   (lib) => lib.fileTypeFromBuffer,
@@ -125,6 +126,7 @@ export class EmbedService {
 
   constructor(
     private readonly config: ConfigService,
+    @Inject(PRISMA_INJECTION_TOKEN)
     private readonly prisma: PrismaService,
   ) {}
 

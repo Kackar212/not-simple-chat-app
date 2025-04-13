@@ -1,15 +1,8 @@
-import { User as PrismaUser } from '@prisma/client';
+import { Prisma, User as PrismaUser } from '@prisma/client';
+import { userPayload } from '../prisma';
 
-export type User = Omit<PrismaUser, 'resetPasswordToken'> & {
-  resetPasswordToken: string | null;
-};
+// export type User = Omit<PrismaUser, 'resetPasswordToken'> & {
+//   resetPasswordToken: string | null;
+// };
 
-export type UserWithoutPrivateData = Omit<
-  PrismaUser,
-  | 'password'
-  | 'email'
-  | 'resetPasswordToken'
-  | 'isAccountActive'
-  | 'activateAccountToken'
-  | 'activationTokenExpiresIn'
->;
+export type UserWithoutPrivateData = Prisma.UserGetPayload<userPayload>;

@@ -1,15 +1,16 @@
 import {
   BadRequestException,
   ForbiddenException,
+  Inject,
   Injectable,
 } from '@nestjs/common';
 import {
   PrismaService,
   Member,
   getHttpException,
-  User,
   rooms,
   SocketEvent,
+  UserWithoutPrivateData,
 } from 'src/common';
 import { CreateChannelDTO } from 'src/channel/dto/create-channel.dto';
 import { MessageService } from 'src/message/message.service';
@@ -18,10 +19,12 @@ import { SocketGateway } from 'src/common/socket/socket.gateway';
 import { Channel, Message } from '@prisma/client';
 import { GetMessagesQuery } from './dto/get-messages-query.dto';
 import { DirectMessageService } from 'src/direct-message/direct-message.service';
+import { PRISMA_INJECTION_TOKEN } from 'src/common/prisma/prisma.module';
 
 @Injectable()
 export class ChannelService {
   constructor(
+    @Inject(PRISMA_INJECTION_TOKEN)
     private readonly prisma: PrismaService,
     private readonly socketGateway: SocketGateway,
     private readonly messageService: MessageService,
@@ -30,7 +33,7 @@ export class ChannelService {
 
   async create(
     { serverId, name, description, type }: CreateChannelDTO,
-    user: User,
+    user: UserWithoutPrivateData,
   ) {
     try {
       const channel = await this.prisma.channel.create({
@@ -145,7 +148,7 @@ export class ChannelService {
 
   async getMessages(
     channel: Channel,
-    user: User,
+    user: UserWithoutPrivateData,
     isRequestAccepted: boolean | null,
     { perPage, around, after = around, before, isPinned }: GetMessagesQuery,
   ) {
@@ -158,12 +161,10 @@ export class ChannelService {
         },
       },
       messageReference: {
-        select: {
-          message: true,
-          id: true,
-          type: true,
+        include: {
           member: {
-            select: {
+            include: {
+              profile: true,
               user: {
                 select: {
                   avatar: true,
@@ -184,6 +185,13 @@ export class ChannelService {
               },
             },
           },
+          poll: {
+            select: {
+              id: true,
+            },
+          },
+          mentions: true,
+          mentionRoles: true,
         },
       },
       member: {
@@ -209,6 +217,8 @@ export class ChannelService {
           },
         },
       },
+      mentions: true,
+      mentionRoles: true,
       attachments: true,
       poll: {
         include: {

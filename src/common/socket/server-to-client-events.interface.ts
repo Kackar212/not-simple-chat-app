@@ -1,5 +1,12 @@
-import { Message, Member, Prisma, Reaction, Friend } from '@prisma/client';
-import { User, UserWithoutPrivateData } from '../types';
+import {
+  Message,
+  Member,
+  Prisma,
+  Reaction,
+  Friend,
+  User,
+} from '@prisma/client';
+import { UserWithoutPrivateData } from '../types';
 import { BasicUser } from '../types/basic-user.type';
 import { types } from 'mediasoup';
 
@@ -112,6 +119,6 @@ export interface ServerToClientEvents {
   pollAnswer: (
     answer: Prisma.PollUserAnswerGetPayload<{
       include: { pollAnswer: true };
-    }> & { messageId: number },
+    }> & { messageId: number; isDeleted?: boolean },
   ) => void;
 }

@@ -5,6 +5,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Inject,
   Param,
   ParseFilePipe,
   ParseIntPipe,
@@ -36,10 +37,12 @@ import { CreateServerDTO } from 'src/server/dto/create-server.dto';
 import { ServerService } from 'src/server/server.service';
 import { CreateEmojiDTO } from './dto/create-emoji.dto';
 import { ManageMemberDTO } from './dto/manage-member.dto';
+import { PRISMA_INJECTION_TOKEN } from 'src/common/prisma/prisma.module';
 
 @Controller('api/servers')
 export class ServerController {
   constructor(
+    @Inject(PRISMA_INJECTION_TOKEN)
     private readonly prisma: PrismaService,
     private readonly serverService: ServerService,
     private readonly channelService: ChannelService,
@@ -146,7 +149,7 @@ export class ServerController {
 
     return members.map((member) => ({
       ...member,
-      user: exclude(member.user, ['password', 'email', 'resetPasswordToken']),
+      user: member.user,
     }));
   }
 

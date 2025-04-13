@@ -1,6 +1,6 @@
-import { Prisma } from '@prisma/client';
+import { Prisma, User } from '@prisma/client';
 import { Request } from 'express';
-import { ServerEntity as Server, User } from 'src/common';
+import { ServerEntity as Server } from 'src/common';
 
 export interface RequestWithUser extends Request {
   channel: Prisma.ChannelGetPayload<{
@@ -11,7 +11,17 @@ export interface RequestWithUser extends Request {
   }>;
   member: Prisma.MemberGetPayload<{
     include: {
-      user: true;
+      user: {
+        omit: {
+          isAccountActive: true;
+          activateAccountToken: true;
+          activationTokenExpiresIn: true;
+          password: true;
+          email: true;
+          isInvisible: true;
+          resetPasswordToken: true;
+        };
+      };
     };
   }>;
   user: User;

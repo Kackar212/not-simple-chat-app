@@ -1,10 +1,14 @@
 import { PassportSerializer } from '@nestjs/passport';
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { PrismaService } from 'src/common/prisma/prisma.service';
+import { PRISMA_INJECTION_TOKEN } from 'src/common/prisma/prisma.module';
 
 @Injectable()
 export class AuthSerializer extends PassportSerializer {
-  constructor(private readonly prisma: PrismaService) {
+  constructor(
+    @Inject(PRISMA_INJECTION_TOKEN)
+    private readonly prisma: PrismaService,
+  ) {
     super();
   }
 

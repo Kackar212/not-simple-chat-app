@@ -41,6 +41,7 @@ import { CreateReactionDTO } from 'src/message/dto/create-reaction.dto';
 import { DeleteReactionDTO } from 'src/message/dto/delete-reaction.dto';
 import { CreatePollDTO } from 'src/message/dto/create-poll.dto';
 import { CreateUserAnswerDTO } from 'src/message/dto/create-answer.dto';
+import { RemoveAnswerDTO } from 'src/message/dto/remove-answer.dto';
 
 @Controller('api/channels')
 export class ChannelController {
@@ -182,5 +183,14 @@ export class ChannelController {
     @Req() { user: { id } }: RequestWithUser,
   ) {
     return this.messageService.createUserAnswer(createUserAnswerDTO, id);
+  }
+
+  @Delete('/polls/answers')
+  @Permissions([ServerPermission.Member])
+  removeUserAnswer(
+    @Body() createUserAnswerDTO: RemoveAnswerDTO,
+    @Req() { user: { id } }: RequestWithUser,
+  ) {
+    return this.messageService.removeUserAnswer(createUserAnswerDTO, id);
   }
 }

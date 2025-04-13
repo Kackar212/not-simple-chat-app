@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   HttpStatus,
+  Inject,
   Injectable,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -19,6 +20,7 @@ import { SocketGateway } from 'src/common/socket/socket.gateway';
 import { DirectMessageService } from 'src/direct-message/direct-message.service';
 import { ServerService } from 'src/server/server.service';
 import { FriendStatus } from './friend-status.enum';
+import { PRISMA_INJECTION_TOKEN } from 'src/common/prisma/prisma.module';
 
 @Injectable()
 export class FriendService {
@@ -43,6 +45,7 @@ export class FriendService {
   };
 
   constructor(
+    @Inject(PRISMA_INJECTION_TOKEN)
     private readonly prisma: PrismaService,
     private readonly channelSocket: SocketGateway,
     private readonly directMessageService: DirectMessageService,
@@ -290,14 +293,7 @@ export class FriendService {
 
       this.channelSocket.server
         .to(rooms.privateRoom(user.username))
-        .emit(
-          'block',
-          exclude(blacklist.blocked, [
-            'password',
-            'email',
-            'resetPasswordToken',
-          ]),
-        );
+        .emit('block', blacklist.blocked);
 
       return blacklist.blocked;
     } catch (e) {
@@ -321,16 +317,7 @@ export class FriendService {
 
       const room = rooms.privateRoom(user.username);
 
-      this.channelSocket.server
-        .to(room)
-        .emit(
-          'unblock',
-          exclude(blacklist.blocked, [
-            'password',
-            'email',
-            'resetPasswordToken',
-          ]),
-        );
+      this.channelSocket.server.to(room).emit('unblock', blacklist.blocked);
 
       return blacklist;
     } catch (e) {

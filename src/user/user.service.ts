@@ -2,11 +2,12 @@ import {
   BadRequestException,
   ForbiddenException,
   HttpStatus,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { $Enums, Prisma, Status } from '@prisma/client';
+import { $Enums, Prisma, Status, User } from '@prisma/client';
 import { compare, hash } from 'bcrypt';
 import { differenceInMinutes, format } from 'date-fns';
 import {
@@ -14,13 +15,13 @@ import {
   PrismaService,
   ServerEntity,
   UploadDestination,
-  User,
   getFileUrl,
   getHttpException,
   rooms,
-  exclude,
   SocketEvent,
   ErrorCode,
+  UserWithoutPrivateData,
+  userPayload,
 } from 'src/common';
 import { SocketGateway } from 'src/common/socket/socket.gateway';
 import { DirectMessageService } from 'src/direct-message/direct-message.service';
@@ -31,10 +32,12 @@ import { ResetPasswordDTO } from 'src/user/dto/reset-password.dto';
 import { UpdateUserDTO } from './dto/update-user.dto';
 import { Member } from 'src/server/server.types';
 import path from 'path';
+import { PRISMA_INJECTION_TOKEN } from 'src/common/prisma/prisma.module';
 
 @Injectable()
 export class UserService {
   constructor(
+    @Inject(PRISMA_INJECTION_TOKEN)
     private readonly prisma: PrismaService,
     private readonly messageService: MessageService,
     private readonly directMessageService: DirectMessageService,
@@ -42,13 +45,6 @@ export class UserService {
     private readonly configService: ConfigService,
     private readonly serverService: ServerService,
   ) {}
-
-  async findOne(options: Prisma.UserFindUniqueArgs): Promise<User | null> {
-    return this.prisma.user.findUnique({
-      ...options,
-      where: options.where,
-    });
-  }
 
   async updateUser(
     userData: UpdateUserDTO,
@@ -145,7 +141,11 @@ export class UserService {
   }: {
     username: string;
     server: ServerEntity;
-    member: Member<{ include: { user: true }; omit: never; select: never }>;
+    member: Member<{
+      include: { user: userPayload };
+      omit: never;
+      select: never;
+    }>;
   }) {
     const { inviteLink } = server;
 
@@ -348,6 +348,7 @@ export class UserService {
             channelUsers: true,
           },
         },
+        roles: true,
       },
     });
 
@@ -361,7 +362,7 @@ export class UserService {
 
     const members = server.members.map((member) => ({
       ...member,
-      user: exclude(member.user, ['password', 'resetPasswordToken', 'email']),
+      user: member.user,
     }));
 
     const member = members.find(({ userId }) => {
@@ -528,17 +529,14 @@ export class UserService {
 
     return {
       ...mutualData,
-      user: exclude(
-        {
-          ...member.user,
-          ...member.profile,
-          roles: member.roles.map((role) => role.role),
-          joinedServerAt: member.createdAt,
-          isOwner: member.isOwner,
-          isBlocked,
-        },
-        ['password', 'resetPasswordToken', 'email'],
-      ),
+      user: {
+        ...member.user,
+        ...member.profile,
+        roles: member.roles.map((role) => role.role),
+        joinedServerAt: member.createdAt,
+        isOwner: member.isOwner,
+        isBlocked,
+      },
       isFriend: !isCurrentUser && !!friend && !friend.isPending,
       hasFriendRequest,
       isInvited: !isCurrentUser && !friend?.isInvited && hasFriendRequest,
@@ -686,6 +684,7 @@ export class UserService {
             activateAccountToken: true;
             activationTokenExpiresIn: true;
             email: true;
+            isInvisible: true;
           };
         };
         profile: true;
@@ -798,12 +797,16 @@ export class UserService {
         profile: true,
         user: {
           omit: {
-            isAccountActive: true,
-            activateAccountToken: true,
-            activationTokenExpiresIn: true,
-            password: true,
-            resetPasswordToken: true,
-            email: true,
+            isInvisible: false,
+          },
+        },
+        roles: {
+          select: {
+            role: {
+              select: {
+                id: true,
+              },
+            },
           },
         },
       },

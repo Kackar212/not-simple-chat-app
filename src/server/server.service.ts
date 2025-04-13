@@ -1,6 +1,7 @@
 import {
   ForbiddenException,
   HttpStatus,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
@@ -11,7 +12,6 @@ import {
   ServerPermission,
   SocketEvent,
   UploadDestination,
-  User,
   createPlaceholder,
   exclude,
   getHttpException,
@@ -20,7 +20,7 @@ import {
 import { CreateServerDTO } from 'src/server/dto/create-server.dto';
 import { CreateRoleDTO } from 'src/server/dto/create-role.dto';
 import { SocketGateway } from 'src/common/socket/socket.gateway';
-import { Prisma, Status } from '@prisma/client';
+import { Prisma, Status, User } from '@prisma/client';
 import { ConfigService } from '@nestjs/config';
 import { CreateEmojiDTO } from './dto/create-emoji.dto';
 import { writeFile } from 'fs/promises';
@@ -28,10 +28,12 @@ import { randomUUID } from 'crypto';
 import sharp from 'sharp';
 import path from 'path';
 import { FindMember, Member } from './server.types';
+import { PRISMA_INJECTION_TOKEN } from 'src/common/prisma/prisma.module';
 
 @Injectable()
 export class ServerService {
   constructor(
+    @Inject(PRISMA_INJECTION_TOKEN)
     private readonly prisma: PrismaService,
     private readonly websocketGateway: SocketGateway,
     private readonly configService: ConfigService,
@@ -186,6 +188,11 @@ export class ServerService {
           channels: {
             take: 1,
           },
+          roles: {
+            select: {
+              id: true,
+            },
+          },
         },
       });
 
@@ -209,6 +216,18 @@ export class ServerService {
                 'activationTokenExpiresIn',
               ]),
               serverId: server.id,
+            },
+          },
+          roles: {
+            create: {
+              role: {
+                connect: {
+                  name_serverId: {
+                    name: 'everyone',
+                    serverId: server.id,
+                  },
+                },
+              },
             },
           },
         },
@@ -391,8 +410,10 @@ export class ServerService {
             },
           },
         },
+        roles: true,
       },
     });
+
     if (!server) {
       throw new NotFoundException({
         code: ErrorCode.NotFound,
@@ -473,13 +494,10 @@ export class ServerService {
   }
 
   async getGlobalServer<
-    Find extends Omit<Prisma.ServerFindUniqueArgs, 'where'> = Omit<
-      Prisma.ServerFindUniqueArgs,
-      'where'
-    >,
+    Find extends Omit<Prisma.ServerFindUniqueArgs, 'where'>,
   >(findOptions: Find) {
     const server = await this.prisma.server.findUnique({
-      ...findOptions,
+      ...(findOptions as any),
       where: {
         isGlobalServer: true,
       },
@@ -510,7 +528,7 @@ export class ServerService {
       },
     });
 
-    return members as Member<{ select: S; include: I; omit: O }>[];
+    return members as unknown as Member<{ select: S; include: I; omit: O }>[];
   }
 
   async getGlobalServerMember<
@@ -528,7 +546,7 @@ export class ServerService {
       },
     });
 
-    return member as Member<{ select: S; include: I; omit: O }>;
+    return member as unknown as Member<{ select: S; include: I; omit: O }>;
   }
 
   async leaveServer(user: User, serverId: number) {

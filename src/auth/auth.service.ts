@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   HttpStatus,
+  Inject,
   Injectable,
   InternalServerErrorException,
 } from '@nestjs/common';
@@ -22,10 +23,12 @@ import { $Enums, User } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import { SocketGateway } from 'src/common/socket/socket.gateway';
 import { ServerService } from 'src/server/server.service';
+import { PRISMA_INJECTION_TOKEN } from 'src/common/prisma/prisma.module';
 
 @Injectable()
 export class AuthService {
   constructor(
+    @Inject(PRISMA_INJECTION_TOKEN)
     private readonly prisma: PrismaService,
     private readonly userService: UserService,
     private readonly mailerService: MailerService,
@@ -52,11 +55,7 @@ export class AuthService {
           ).toString(),
         },
         omit: {
-          activateAccountToken: true,
-          isAccountActive: true,
-          activationTokenExpiresIn: true,
-          password: true,
-          resetPasswordToken: true,
+          email: false,
         },
       });
 
@@ -82,13 +81,7 @@ export class AuthService {
           },
           profile: {
             create: {
-              ...exclude(newUser, [
-                'id',
-                'updatedAt',
-                'createdAt',
-                'username',
-                'email',
-              ]),
+              ...exclude(newUser, ['id', 'updatedAt', 'createdAt', 'username']),
               serverId: server.id,
             },
           },
@@ -211,13 +204,17 @@ export class AuthService {
   }
 
   public async getUser(username: string, password: string) {
-    const user = await this.userService.findOne({
+    const user = await this.prisma.user.findUnique({
       where: {
         username,
       },
-      omit: {
-        password: false,
-        isAccountActive: false,
+      select: {
+        activateAccountToken: true,
+        activationTokenExpiresIn: true,
+        isAccountActive: true,
+        password: true,
+        email: true,
+        id: true,
       },
     });
 
@@ -276,7 +273,13 @@ export class AuthService {
       });
     }
 
-    return exclude(user, ['password', 'isAccountActive']);
+    return exclude(user, [
+      'password',
+      'isAccountActive',
+      'activateAccountToken',
+      'activationTokenExpiresIn',
+      'email',
+    ]);
   }
 
   async resetPasswordRequest(email: string) {

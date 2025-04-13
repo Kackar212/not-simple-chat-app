@@ -1,17 +1,24 @@
 import {
-  ForbiddenException,
   HttpStatus,
+  Inject,
   Injectable,
   NotFoundException,
 } from '@nestjs/common';
-import { $Enums, FileType, Message, PollType, Prisma } from '@prisma/client';
+import {
+  $Enums,
+  FileType,
+  Message,
+  PollType,
+  Prisma,
+  User,
+} from '@prisma/client';
 import {
   ErrorCode,
   Member,
   PrismaService,
   SocketEvent,
   UploadDestination,
-  User,
+  UserWithoutPrivateData,
   getHttpException,
   rooms,
 } from 'src/common';
@@ -24,10 +31,13 @@ import { EmbedService } from 'src/embed/embed.service';
 import { DirectMessageService } from 'src/direct-message/direct-message.service';
 import { Server } from 'socket.io';
 import { unlink } from 'fs/promises';
-import { find } from 'linkifyjs';
+import * as linkify from 'linkifyjs';
 import { CreatePollDTO } from './dto/create-poll.dto';
 import { CreateUserAnswerDTO } from './dto/create-answer.dto';
+import { PRISMA_INJECTION_TOKEN } from 'src/common/prisma/prisma.module';
 import path from 'path';
+import 'linkify-plugin-mention';
+import { RemoveAnswerDTO } from './dto/remove-answer.dto';
 
 interface CreateMessage extends CreateMessageDTO {
   member: Member;
@@ -36,6 +46,7 @@ interface CreateMessage extends CreateMessageDTO {
 @Injectable()
 export class MessageService {
   constructor(
+    @Inject(PRISMA_INJECTION_TOKEN)
     private readonly prisma: PrismaService,
     private readonly embedService: EmbedService,
     private readonly socketGateway: SocketGateway,
@@ -47,10 +58,64 @@ export class MessageService {
     attachments: Express.Multer.File[],
     createPollDTO?: CreatePollDTO,
   ) {
-    const links = find(message, 'url', { defaultProtocol: 'https' }).slice(
-      0,
-      5,
+    const links = linkify
+      .find(message, 'url', { defaultProtocol: 'https' })
+      .slice(0, 5);
+
+    const rawMentions = [
+      ...message.matchAll(/<@&?!?(\d+?)>|(@(?:everyone|here))/g),
+    ];
+
+    const { roles, members, mentionEveryone, mentionHere } = rawMentions.reduce(
+      (mentions, [mention, id]) => {
+        const isRole = mention.startsWith('<@&');
+        const isStatic = mention === '@everyone' || mention === '@here';
+        const mentionEveryone = mentions.mentionEveryone
+          ? mentions.mentionEveryone
+          : mention === '@everyone';
+        const mentionHere = mentions.mentionHere
+          ? mentions.mentionHere
+          : mention === '@here';
+
+        if (isRole) {
+          mentions.roles.add(Number(id));
+        }
+
+        if (!isRole && !isStatic) {
+          mentions.members.add(Number(id));
+        }
+
+        return {
+          ...mentions,
+          mentionEveryone,
+          mentionHere,
+        };
+      },
+      {
+        roles: new Set<number>(),
+        members: new Set<number>(),
+        mentionEveryone: false,
+        mentionHere: false,
+      },
     );
+
+    // console.log(roles, members, mentionEveryone, mentionHere);
+
+    // const mentions = await this.prisma.member.findMany({
+    //   where: {
+    //     id: {
+    //       in: [...members],
+    //     },
+    //   },
+    // });
+
+    // const mentionRoles = await this.prisma.role.findMany({
+    //   where: {
+    //     id: {
+    //       in: [...roles],
+    //     },
+    //   },
+    // });
 
     const include = {
       embeds: {
@@ -97,6 +162,8 @@ export class MessageService {
           },
         },
       },
+      mentions: true,
+      mentionRoles: true,
       member: {
         include: {
           roles: {
@@ -168,7 +235,9 @@ export class MessageService {
               ).toString(),
               extension: this.getFileExtension(file),
               isSpoiler: file.originalname.startsWith('__SPOILER__'),
-              isVoiceClip: file.originalname.startsWith('__VOICECLIP__'),
+              isVoiceClip:
+                file.originalname.startsWith('__VOICECLIP__') &&
+                file.mimetype.startsWith('audio/'),
               size: file.size,
               originalName: file.originalname
                 .replace('__SPOILER__', '')
@@ -180,6 +249,17 @@ export class MessageService {
           },
         },
         poll: createPollData,
+        mentionRoles: {
+          createMany: {
+            data: [...roles].map((roleId) => ({ roleId })),
+          },
+        },
+        mentions: {
+          createMany: {
+            data: [...members].map((memberId) => ({ memberId })),
+          },
+        },
+        mentionEveryone: mentionEveryone || mentionHere,
       },
       include,
     });
@@ -527,7 +607,7 @@ export class MessageService {
     }
   }
 
-  async getReactions(user: User, messageIds: number[]) {
+  async getReactions(user: UserWithoutPrivateData, messageIds: number[]) {
     const reactionSelect = {
       select: {
         emoji: {
@@ -657,6 +737,57 @@ export class MessageService {
         .emit(SocketEvent.PollAnswer, { ...answer, messageId });
 
       return answer;
+    } catch (e) {
+      throw getHttpException(e);
+    }
+  }
+
+  public async removeUserAnswer(
+    { answerId, messageId }: RemoveAnswerDTO,
+    userId: number,
+  ) {
+    const poll = await this.prisma.poll.findUnique({
+      where: {
+        messageId,
+        answers: {
+          some: {
+            id: answerId,
+          },
+        },
+      },
+      select: { id: true, message: { select: { channelId: true } } },
+    });
+
+    if (!poll) {
+      throw new NotFoundException({
+        code: ErrorCode.NotFound,
+        message: 'Poll does not exists',
+        statusCode: HttpStatus.NOT_FOUND,
+      });
+    }
+
+    try {
+      const answer = await this.prisma.pollUserAnswer.delete({
+        where: {
+          userId_pollId: {
+            pollId: poll.id,
+            userId,
+          },
+        },
+        include: {
+          pollAnswer: true,
+        },
+      });
+
+      this.socketGateway.server
+        .to(rooms.channel(poll.message.channelId))
+        .emit(SocketEvent.PollAnswer, {
+          ...answer,
+          messageId,
+          isDeleted: true,
+        });
+
+      return {};
     } catch (e) {
       throw getHttpException(e);
     }

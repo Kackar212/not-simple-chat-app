@@ -128,6 +128,8 @@ model Member {
 
   createdAt DateTime @default(now())
 
+  mentions Mention[]
+
   @@unique([serverId, userId])
 }
 
@@ -150,6 +152,7 @@ model ServerProfile {
 
   isInvisible Boolean @default(false)
 
+  @@unique(name: "displayNameProfile", [serverId, displayName])
   @@unique([serverId, memberId])
 }
 
@@ -162,6 +165,8 @@ model Role {
 
   members UserRole[]
 
+  mentions MentionRole[]
+
   permissions Permission[]
 
   color String @default("rgb(220, 220, 220)")
@@ -170,6 +175,26 @@ model Role {
   updatedAt DateTime @default(now()) @updatedAt
 
   @@unique([name, serverId])
+}
+
+model MentionRole {
+  message Message @relation(fields: [messageId], references: [id])
+  messageId Int
+
+  role Role @relation(fields: [roleId], references: [id])
+  roleId Int
+
+  @@id([messageId, roleId])
+}
+
+model Mention {
+  message Message @relation(fields: [messageId], references: [id])
+  messageId Int
+
+  member Member @relation(fields: [memberId], references: [id])
+  memberId Int
+
+  @@id([messageId, memberId])
 }
 
 model UserRole {
@@ -295,6 +320,10 @@ model Message {
   messageReferenceId Int?
 
   messageReferences Message[] @relation("References")
+
+  mentionRoles MentionRole[]
+  mentions Mention[]
+  mentionEveryone Boolean @default(false)
 
   attachments Attachment[]
   reactions Reaction[]
